@@ -3,6 +3,7 @@
 #include <gui/elements.h>
 #include <string.h>
 #include "status_page.h"
+#include "proxmark5_frame.h"
 #include "status_page_tests.h"
 #include "pm3_cmd.h"
 
@@ -141,7 +142,7 @@ static void status_page_scan(StatusPage* status_page) {
 
     // No reply at all means the device isn't responding - skip the other 4
     // tests (they'd all time out too) and show one error page instead.
-    if(caps_result == PM3_ETIMEOUT) {
+    if(caps_result == PM3_ETIMEOUT || caps_result == PM3_EIO) {
         furi_thread_list_free(thread_list);
         StatusPageModel* model = view_get_model(status_page->view);
         bool active = !*cancel;
@@ -269,7 +270,9 @@ static void status_page_scan(StatusPage* status_page) {
 static int32_t status_page_worker(void* context) {
     StatusPage* status_page = context;
     for(;;) {
+        proxmark5_frame_begin_operation(&status_page->worker_thread_cancel_requested);
         status_page_scan(status_page);
+        proxmark5_frame_end_operation();
 
         view_get_model(status_page->view);
         if(!status_page->worker_restart_requested) {
