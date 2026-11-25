@@ -12,6 +12,7 @@ class Reader:
     pm5_command: str
     placement: str
     usb_fields: dict[str, str]
+    data_key: str = ""
     optional_fields: tuple[str, ...] = ()
     timeout: float = 8
 
@@ -50,7 +51,17 @@ HF = Reader(
     },
     optional_fields=("ats",),
 )
-READERS = (HF,)
+EM4100 = Reader(
+    "em4100",
+    2,
+    "OK",
+    "lf em 410x reader -v",
+    "Place the Chameleon Ultra on the PM5 LF coil.",
+    {"uid": r"\bEM\s+410x\s+ID\s+([\da-f]{10})\b"},
+    data_key="uid",
+    timeout=12,
+)
+READERS = (HF, EM4100)
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,9 @@ CASES = (
     Case(
         "iso4-uid-10", HF, "HF14A_4", "04E27B58A9C60DF3B475", "0084", "20", "0578807002"
     ),
+    Case("em4100-increasing", EM4100, "EM410X", "123456789A"),
+    Case("em4100-mixed", EM4100, "EM410X", "02B7D3E405"),
+    Case("em4100-high-bit", EM4100, "EM410X", "F10C8A36DE"),
 )
 
 

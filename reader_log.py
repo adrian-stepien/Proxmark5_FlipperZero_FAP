@@ -40,7 +40,8 @@ def read_fields(reader, record):
         )
     if record["status"] != 0:
         return None
-    values = {key: record.get(key) for key in reader.usb_fields}
+    source = {reader.data_key: record.get("data")} if reader.data_key else record
+    values = {key: source.get(key) for key in reader.usb_fields}
     if any(not isinstance(value, str) for value in values.values()):
         raise ValueError(
             f"Missing or invalid Flipper fields for {reader.name}: {record}"

@@ -6,7 +6,7 @@ import sys
 from contextlib import contextmanager
 from importlib import import_module
 
-from fixtures import HF
+from fixtures import EM4100, HF
 
 
 @contextmanager
@@ -61,10 +61,14 @@ class Chameleon:
             raise ValueError(f"Chameleon rejected {case.name}: {exc}") from exc
 
     def _select(self, case):
-        if case.reader is not HF:
+        if case.reader not in (HF, EM4100):
             raise ValueError(f"No Chameleon fixture for {case.reader.name}")
         cmd = self.command
-        band = self.enums.TagSenseType.HF
+        band = (
+            self.enums.TagSenseType.HF
+            if case.reader is HF
+            else self.enums.TagSenseType.LF
+        )
         kind = getattr(self.enums.TagSpecificType, case.emulation)
         uid = bytes.fromhex(case.uid)
         self.sense = band
@@ -84,15 +88,24 @@ class Chameleon:
 
         # Selecting a slot saves its current data. Arm it before setting the test ID.
         cmd.set_active_slot(self.slot)
-        data = {
-            "uid": uid,
-            "atqa": bytes.fromhex(case.atqa)[::-1],
-            "sak": bytes.fromhex(case.sak),
-            "ats": bytes.fromhex(case.ats),
-        }
-        cmd.hf14a_set_anti_coll_data(**data)
+        if case.reader is HF:
+            data = {
+                "uid": uid,
+                "atqa": bytes.fromhex(case.atqa)[::-1],
+                "sak": bytes.fromhex(case.sak),
+                "ats": bytes.fromhex(case.ats),
+            }
+            cmd.hf14a_set_anti_coll_data(**data)
+        else:
+            cmd.em410x_set_emu_id(uid)
 
-        if cmd.hf14a_get_anti_coll_data() != data:
+        readback = (
+            cmd.hf14a_get_anti_coll_data()
+            if case.reader is HF
+            else cmd.em410x_get_emu_id()
+        )
+        expected = data if case.reader is HF else uid
+        if readback != expected:
             raise ValueError("Chameleon fixture readback differs from programmed data")
 
     def restore(self):
