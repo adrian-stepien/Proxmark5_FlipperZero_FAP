@@ -61,7 +61,17 @@ EM4100 = Reader(
     data_key="uid",
     timeout=12,
 )
-READERS = (HF, EM4100)
+HITAG2 = Reader(
+    "hitag2",
+    1,
+    "OK",
+    "lf hitag reader",
+    "Place only your Hitag2 test tag on the PM5 LF coil.",
+    {"uid": r"^.*?\bUID[.:]+ +([\da-f]{8})\b"},
+    data_key="uid",
+    timeout=12,
+)
+READERS = (HF, EM4100, HITAG2)
 
 
 @dataclass(frozen=True)
@@ -105,6 +115,7 @@ CASES = (
     Case("em4100-increasing", EM4100, "EM410X", "123456789A"),
     Case("em4100-mixed", EM4100, "EM410X", "02B7D3E405"),
     Case("em4100-high-bit", EM4100, "EM410X", "F10C8A36DE"),
+    Case("hitag2-physical", HITAG2),
 )
 
 

@@ -136,9 +136,9 @@ def arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--suite",
-        choices=("chameleon", *(reader.name for reader in READERS)),
+        choices=("chameleon", "all", *(reader.name for reader in READERS)),
         default="chameleon",
-        help="Chameleon mode prompts for placement",
+        help="Chameleon and all prompt for placement before each group",
     )
     parser.add_argument(
         "--case",
@@ -162,7 +162,8 @@ def arguments():
         case
         for case in CASES
         if (
-            (args.suite == "chameleon" and case.emulation)
+            args.suite == "all"
+            or (args.suite == "chameleon" and case.emulation)
             or case.reader.name == args.suite
         )
         and (not args.case or case.name in args.case)
@@ -207,7 +208,7 @@ def main():
             confirmed = {}
             for case in cases:
                 group = case.reader.name
-                if args.suite == "chameleon" and group not in confirmed:
+                if args.suite in ("chameleon", "all") and group not in confirmed:
                     reply = input(
                         f"{case.reader.placement} Enter to start, or s to skip: "
                     )
