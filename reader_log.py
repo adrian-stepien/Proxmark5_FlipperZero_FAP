@@ -46,4 +46,4 @@ def read_fields(reader, record):
         raise ValueError(
             f"Missing or invalid Flipper fields for {reader.name}: {record}"
         )
-    return values
+    return reader.result_fields(values)

@@ -30,6 +30,11 @@ class Reader:
                     f"{self.name}: expected one PM5 USB {key}, got {sorted(matches)}"
                 )
             values[key] = matches.pop()
+        return self.result_fields(values)
+
+    def result_fields(self, values):
+        if "config" in values:
+            values = values | {"max_block": str((int(values["config"], 16) >> 5) & 7)}
         return values
 
     def log_expectation(self, reference):
@@ -71,7 +76,17 @@ HITAG2 = Reader(
     data_key="uid",
     timeout=12,
 )
-READERS = (HF, EM4100, HITAG2)
+T5577 = Reader(
+    "t5577",
+    3,
+    "OK",
+    "lf t55xx detect",
+    "Place only your RF/32 Manchester T5577 test tag on the PM5 LF coil.",
+    {"config": r"^.*?\bBlock\s*0[.: ]+([\da-f]{8})\b"},
+    data_key="config",
+    timeout=12,
+)
+READERS = (HF, EM4100, HITAG2, T5577)
 
 
 @dataclass(frozen=True)
@@ -116,6 +131,7 @@ CASES = (
     Case("em4100-mixed", EM4100, "EM410X", "02B7D3E405"),
     Case("em4100-high-bit", EM4100, "EM410X", "F10C8A36DE"),
     Case("hitag2-physical", HITAG2),
+    Case("t5577-physical", T5577),
 )
 
 
