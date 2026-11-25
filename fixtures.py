@@ -63,4 +63,7 @@ class Case:
         }
 
 
-CASES = (Case("ultralight-7", HF, "MF0ICU1", "041920D37A5E8C", "0044", "00"),)
+CASES = (
+    Case("ultralight-7", HF, "MF0ICU1", "041920D37A5E8C", "0044", "00"),
+    Case("ntag213-7", HF, "NTAG_213", "0458A1B9C3D47E", "0044", "00"),
+)

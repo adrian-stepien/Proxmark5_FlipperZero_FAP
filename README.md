@@ -2,7 +2,7 @@
 
 Run the installed Flipper app against a Proxmark5 connected over USB and CEP. The bench sets up each synthetic tag on a Chameleon Ultra, reads it with the PM5 USB client, opens the same reader on the Flipper and rescans. It compares the result records emitted by the FAP when each read finishes. Screenshots show the device view for manual review.
 
-The first fixture is a MIFARE Ultralight with a seven-byte UID.
+The HF fixtures cover seven-byte Ultralight and NTAG213 UIDs.
 
 ## Setup
 
