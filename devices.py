@@ -88,7 +88,7 @@ class Chameleon:
             "uid": uid,
             "atqa": bytes.fromhex(case.atqa)[::-1],
             "sak": bytes.fromhex(case.sak),
-            "ats": b"",
+            "ats": bytes.fromhex(case.ats),
         }
         cmd.hf14a_set_anti_coll_data(**data)
 

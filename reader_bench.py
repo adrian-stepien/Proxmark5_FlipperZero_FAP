@@ -30,7 +30,8 @@ def capture(stream, log, reader, key, expected, path):
     }
 
 
-def read_app(flipper, reader, expected, directory, phases):
+def read_app(flipper, reader, reference, directory, phases):
+    expected = reader.log_expectation(reference)
     with flipper.app() as stream:
         log = ReaderLog(stream, directory / "flipper.jsonl")
         try:
@@ -43,6 +44,16 @@ def read_app(flipper, reader, expected, directory, phases):
                 phases[phase] = capture(
                     stream, log, reader, key, expected, directory / f"{phase}.png"
                 )
+            if ats := expected.get("ats"):
+                observed = (phases["rescan"]["observed"] or {}).get("ats")
+                phases["ats"] = {"status": "FAIL", "screenshot": None}
+                if observed:
+                    stream.press("OK", wait_for_screen=True)
+                    screenshot = stream.snapshot(directory / "ats.png")
+                    phases["ats"] = {
+                        "status": "PASS" if observed == ats and screenshot else "FAIL",
+                        "screenshot": screenshot,
+                    }
         except (OSError, ValueError):
             stream.snapshot(directory / "last-screen.png")
             raise
@@ -97,15 +108,15 @@ def write_report(path, report):
     lines = [
         "# Proxmark5 reader bench",
         "",
-        "| Case | PM5 USB | Flipper first | Flipper rescan | Result |",
-        "| --- | --- | --- | --- | --- |",
+        "| Case | PM5 USB | Flipper first | Flipper rescan | ATS | Result |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for result in report["cases"]:
         usb = result.get("usb_status", "SKIP")
         if usb != "SKIP":
             usb = f"[{usb}]({result['case']}/pm5.txt)"
         cells = [result["case"], usb]
-        for stage in ("first", "rescan"):
+        for stage in ("first", "rescan", "ats"):
             phase = result.get("phases", {}).get(stage)
             if phase and phase["screenshot"]:
                 cells.append(

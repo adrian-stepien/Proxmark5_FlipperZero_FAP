@@ -2,7 +2,7 @@
 
 Run the installed Flipper app against a Proxmark5 connected over USB and CEP. The bench sets up each synthetic tag on a Chameleon Ultra, reads it with the PM5 USB client, opens the same reader on the Flipper and rescans. It compares the result records emitted by the FAP when each read finishes. Screenshots show the device view for manual review.
 
-The HF fixtures cover Ultralight, NTAG213, and four- and seven-byte MIFARE Classic UIDs.
+The HF fixtures cover Ultralight, NTAG213, and four- and seven-byte MIFARE Classic UIDs. The ISO 14443-4 cases also check ATS, its CRC and a ten-byte UID.
 
 ## Setup
 
@@ -32,7 +32,7 @@ The default run asks you to confirm placement on the HF antenna. For an unattend
 
 ## Results
 
-Open the run's `README.md` for separate PM5 USB, Flipper first-read and rescan results with links to the captures. `results.json` records the firmware and FAP hash, comparison values and elapsed times. Each case keeps its PM5 USB output and original Flipper records in `flipper.jsonl`. The bench launches the app over USB RPC and receives the result records on that connection. The Flipper streams them from memory. The Mac saves the transcripts and screenshots. A failed case or a run where every case was skipped exits with an error.
+Open the run's `README.md` for separate PM5 USB, Flipper first-read, rescan and ATS results with links to the captures. `results.json` records the firmware and FAP hash, comparison values and elapsed times. Each case keeps its PM5 USB output and original Flipper records in `flipper.jsonl`. The bench launches the app over USB RPC and receives the result records on that connection. The Flipper streams them from memory. The Mac saves the transcripts and screenshots. A failed case or a run where every case was skipped exits with an error.
 
 ## Add a case
 

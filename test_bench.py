@@ -9,12 +9,15 @@ from unittest.mock import Mock, call, patch
 
 import reader_bench
 from devices import PM5, Chameleon
-from fixtures import CASES, HF
+from fixtures import CASES, HF, crc_a
 from flipper import FlipperSession, take_message, varint
 from reader_log import ReaderLog
 
 
 class ReferenceTest(unittest.TestCase):
+    def test_ats_crc_matches_live_read(self):
+        self.assertEqual(crc_a("10788070020031C16409976126009000"), "C950")
+
     def test_usb_failure_keeps_output_without_accepting_a_printed_id(self):
         result = SimpleNamespace(
             returncode=1,
