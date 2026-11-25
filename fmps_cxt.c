@@ -152,6 +152,12 @@ Proxmark5App* proxmark5_app_alloc() {
 void proxmark5_app_free(Proxmark5App* app) {
     furi_assert(app);
 
+    // Workers can still update their views after the dispatcher loop stops.
+    main_page_stop_worker(app->main_page);
+    read_hitag2_page_stop_worker(app->read_hitag2_page);
+    read_hf14a_page_stop_worker(app->read_hf14a_page);
+    status_page_stop_worker(app->status_page);
+
     view_dispatcher_remove_view(app->view_dispatcher, MainPageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, OperatePageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, ReadHitag2PageViewId);
@@ -193,6 +199,7 @@ int32_t fmps_cxt_app(void* p) {
     Proxmark5App* app = proxmark5_app_alloc();
     // Default to the main page view
     view_dispatcher_switch_to_view(app->view_dispatcher, MainPageViewId);
+    main_page_start(app->main_page);
     view_dispatcher_run(app->view_dispatcher);
     // Free the app context and exit
     proxmark5_app_free(app);

@@ -274,21 +274,21 @@ ReadHf14aPage*
     return read_hf14a_page;
 }
 
+void read_hf14a_page_stop_worker(ReadHf14aPage* read_hf14a_page) {
+    if(!read_hf14a_page || !read_hf14a_page->worker_thread) return;
+    read_hf14a_page_stop(read_hf14a_page);
+    furi_thread_join(read_hf14a_page->worker_thread);
+    furi_thread_free(read_hf14a_page->worker_thread);
+    read_hf14a_page->worker_thread = NULL;
+    read_hf14a_page->worker_thread_running = false;
+}
+
 void read_hf14a_page_free(ReadHf14aPage* read_hf14a_page) {
     if(!read_hf14a_page) {
         return;
     }
 
-    // Runs on the app thread after the view dispatcher has stopped, so blocking
-    // here is safe - same contract as read_hitag2_page_free().
-    read_hf14a_page->worker_thread_cancel_requested = true;
-
-    if(read_hf14a_page->worker_thread) {
-        furi_thread_join(read_hf14a_page->worker_thread);
-        furi_thread_free(read_hf14a_page->worker_thread);
-        read_hf14a_page->worker_thread = NULL;
-        read_hf14a_page->worker_thread_running = false;
-    }
+    read_hf14a_page_stop_worker(read_hf14a_page);
 
     if(read_hf14a_page->view) {
         view_set_context(read_hf14a_page->view, NULL);

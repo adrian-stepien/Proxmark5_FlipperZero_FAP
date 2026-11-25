@@ -324,22 +324,21 @@ ReadHitag2Page*
     return read_hitag2_page;
 }
 
+void read_hitag2_page_stop_worker(ReadHitag2Page* read_hitag2_page) {
+    if(!read_hitag2_page || !read_hitag2_page->worker_thread) return;
+    read_hitag2_page_stop(read_hitag2_page);
+    furi_thread_join(read_hitag2_page->worker_thread);
+    furi_thread_free(read_hitag2_page->worker_thread);
+    read_hitag2_page->worker_thread = NULL;
+    read_hitag2_page->worker_thread_running = false;
+}
+
 void read_hitag2_page_free(ReadHitag2Page* read_hitag2_page) {
     if(!read_hitag2_page) {
         return;
     }
 
-    // Runs on the app thread after the view dispatcher has stopped, so blocking here
-    // is safe. The worker notices the cancel flag within ~10ms and issues its own
-    // CMD_BREAK_LOOP, which keeps SPI traffic on the worker thread where it belongs.
-    read_hitag2_page->worker_thread_cancel_requested = true;
-
-    if(read_hitag2_page->worker_thread) {
-        furi_thread_join(read_hitag2_page->worker_thread);
-        furi_thread_free(read_hitag2_page->worker_thread);
-        read_hitag2_page->worker_thread = NULL;
-        read_hitag2_page->worker_thread_running = false;
-    }
+    read_hitag2_page_stop_worker(read_hitag2_page);
 
     if(read_hitag2_page->view) {
         view_set_context(read_hitag2_page->view, NULL);
