@@ -120,6 +120,7 @@ CASES = (
     Case("ntag216-7", HF, "NTAG_216", "0400629B14C7E0", "0044", "00"),
     Case("classic-4", HF, "MIFARE_1024", "02A917C4", "0004", "08"),
     Case("classic-7", HF, "MIFARE_1024", "02E7A4C18B5309", "0044", "08"),
+    Case("classic-4k", HF, "MIFARE_4096", "04A46E29", "0002", "18"),
     Case(
         "iso4-ats",
         HF,
