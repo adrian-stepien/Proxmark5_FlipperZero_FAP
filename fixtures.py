@@ -113,6 +113,7 @@ class Case:
 CASES = (
     Case("ultralight-7", HF, "MF0ICU1", "041920D37A5E8C", "0044", "00"),
     Case("ultralight-ev1", HF, "MF0UL11", "0431A06C217B08", "0044", "00"),
+    Case("ntag210-7", HF, "NTAG_210", "046902B3D1006A", "0044", "00"),
     Case("ntag213-7", HF, "NTAG_213", "0458A1B9C3D47E", "0044", "00"),
     Case("classic-4", HF, "MIFARE_1024", "02A917C4", "0004", "08"),
     Case("classic-7", HF, "MIFARE_1024", "02E7A4C18B5309", "0044", "08"),
