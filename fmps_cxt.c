@@ -28,6 +28,14 @@ static void fmps_cxt_menu_selected(void* context, uint32_t action) {
 static bool fmps_cxt_custom_event_callback(void* context, uint32_t event) {
     Proxmark5App* app = context;
 
+    if(event >= OperateSimpleReaderFirst) {
+        size_t index = event - OperateSimpleReaderFirst;
+        if(index >= simple_reader_count) return false;
+        simple_reader_page_start(app->simple_reader_page, simple_readers[index]);
+        view_dispatcher_switch_to_view(app->view_dispatcher, SimpleReaderPageViewId);
+        return true;
+    }
+
     switch(event) {
     case OperateOpenMenu:
         view_dispatcher_switch_to_view(app->view_dispatcher, OperatePageViewId);
@@ -74,6 +82,11 @@ static uint32_t status_page_previous_callback(void* context) {
     return OperatePageViewId;
 }
 
+static uint32_t simple_reader_page_previous_callback(void* context) {
+    simple_reader_page_stop(context);
+    return OperatePageViewId;
+}
+
 Proxmark5App* proxmark5_app_alloc() {
     Proxmark5App* app = calloc(1, sizeof(Proxmark5App));
     app->gui = furi_record_open(RECORD_GUI);
@@ -115,6 +128,11 @@ Proxmark5App* proxmark5_app_alloc() {
         ReadHf14aPageViewId,
         read_hf14a_page_get_view(app->read_hf14a_page));
 
+    app->simple_reader_page = simple_reader_page_create();
+    View* reader_view = simple_reader_page_get_view(app->simple_reader_page);
+    view_set_previous_callback(reader_view, simple_reader_page_previous_callback);
+    view_dispatcher_add_view(app->view_dispatcher, SimpleReaderPageViewId, reader_view);
+
     // Create and add the hardware-status dashboard to the view dispatcher.
     app->status_page = status_page_create();
     view_set_previous_callback(
@@ -138,12 +156,15 @@ void proxmark5_app_free(Proxmark5App* app) {
     main_page_stop_worker(app->main_page);
     read_hitag2_page_stop_worker(app->read_hitag2_page);
     read_hf14a_page_stop_worker(app->read_hf14a_page);
+    simple_reader_page_stop_worker(app->simple_reader_page);
     status_page_stop_worker(app->status_page);
 
     view_dispatcher_remove_view(app->view_dispatcher, MainPageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, OperatePageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, ReadHitag2PageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, ReadHf14aPageViewId);
+    view_dispatcher_remove_view(app->view_dispatcher, SimpleReaderPageViewId);
+    simple_reader_page_free(app->simple_reader_page);
     view_dispatcher_remove_view(app->view_dispatcher, StatusPageViewId);
     if(app->main_page) {
         main_page_free(app->main_page);

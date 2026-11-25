@@ -67,6 +67,7 @@ HOST = r'''
 #include <stdio.h>
 #include <string.h>
 #include "proxmark5_frame.h"
+#define RANGE_SIZE (PM3_CMD_DATA_SIZE - 4)
 
 static uint32_t tick, old_due, new_due, echo_due, stale_due, cancel_due;
 static unsigned selects, pings, handshakes;
@@ -74,6 +75,9 @@ static bool suppress_echo, link_active, handshake_ok;
 static bool delay_first_echo, waiting_for_reply;
 static volatile bool canceled;
 static uint8_t nonce[12], stale_nonce[12];
+static struct { uint32_t due; uint8_t mark; } ranges[3];
+static unsigned range_count, range_head;
+
 static void deliver(uint16_t cmd, const void* payload, uint16_t size) {
     PacketResponseNGRaw frame = {.pre = {
         .magic = RESPONSENG_PREAMBLE_MAGIC, .cmd = cmd, .ng = true, .length = size,
@@ -110,6 +114,13 @@ void furi_delay_ms(uint32_t ms) {
         old_due = 0;
         deliver_card('A');
     }
+    while(range_head < range_count && tick >= ranges[range_head].due) {
+        uint8_t chunk[PM3_CMD_DATA_SIZE] = {0};
+        const uint32_t done[] = {RANGE_SIZE, RANGE_SIZE};
+        memset(chunk + 4, ranges[range_head++].mark, RANGE_SIZE);
+        deliver(CMD_DOWNLOADED_BIGBUF, chunk, sizeof(chunk));
+        deliver(CMD_DOWNLOAD_BIGBUF, done, sizeof(done));
+    }
     if(echo_due && tick >= echo_due) {
         echo_due = 0;
         deliver(CMD_PING, nonce, sizeof(nonce));
@@ -135,6 +146,18 @@ bool proxmark5_com_send_spi(uint8_t* data, size_t length) {
         else new_due = tick + 80;
         return true;
     }
+    if(header.cmd == CMD_DOWNLOAD_BIGBUF) {
+        uint32_t request[2];
+        assert(header.length == sizeof(request) && range_count < 3);
+        memcpy(request, data + sizeof(header), sizeof(request));
+        assert(request[1] == RANGE_SIZE && (request[0] == 0 || request[0] == RANGE_SIZE));
+        uint32_t previous_due = range_count ? ranges[range_count - 1].due : 0;
+        uint32_t ready = tick > previous_due ? tick : previous_due;
+        ranges[range_count].mark = request[0] ? 'B' : 'A';
+        ranges[range_count].due = ready + (range_count == 0 ? 400 : 200);
+        range_count++;
+        return true;
+    }
     assert(header.cmd == CMD_PING && header.length == sizeof(nonce));
     assert(memcmp(nonce, data + sizeof(header), sizeof(nonce)) != 0);
     if(delay_first_echo) memcpy(stale_nonce, nonce, sizeof(nonce));
@@ -145,6 +168,9 @@ bool proxmark5_com_send_spi(uint8_t* data, size_t length) {
         stale_due = tick + 10;
         if(!suppress_echo) {
             echo_due = tick + 120;
+            if(range_count && echo_due <= ranges[range_count - 1].due) {
+                echo_due = ranges[range_count - 1].due + 10;
+            }
         }
     }
     return true;
@@ -168,6 +194,7 @@ static int scan(iso14a_card_select_t* card, bool* found) {
 static void setup(void) {
     tick = old_due = new_due = echo_due = stale_due = cancel_due = 0;
     selects = pings = handshakes = 0;
+    range_count = range_head = 0;
     canceled = suppress_echo = handshake_ok = false;
     delay_first_echo = false;
     link_active = true;
@@ -225,6 +252,17 @@ int main(void) {
     proxmark5_frame_deinit();
 
     setup();
+    uint8_t first[RANGE_SIZE], second[RANGE_SIZE];
+    proxmark5_frame_begin_operation(NULL);
+    assert(lf_sample_download_range(first, 0, RANGE_SIZE, RANGE_SIZE) == PM3_SUCCESS);
+    assert(lf_sample_download_range(second, RANGE_SIZE, RANGE_SIZE, RANGE_SIZE) == PM3_SUCCESS);
+    proxmark5_frame_end_operation();
+    assert(first[0] == 'A' && second[0] == 'B' && second[RANGE_SIZE - 1] == 'B');
+    assert(range_head == range_count && pings == 1);
+    assert(!waiting_for_reply);
+    proxmark5_frame_deinit();
+
+    setup();
     delay_first_echo = true;
     uint32_t rtt_ms = 0;
     proxmark5_frame_begin_operation(NULL);
@@ -247,16 +285,19 @@ int main(void) {
     proxmark5_frame_end_operation();
     assert(!waiting_for_reply);
     proxmark5_frame_deinit();
-    puts("PM5 reply order: stale UID and echo discarded, restart recovered");
+    puts("PM5 reply order: stale UID, download and echo discarded, restart recovered");
 }
 '''
 
 source = (ROOT / "pages/read_hf14a_page.c").read_text()
 reader = source[source.index("static int read_hf14a_test("):source.index("static void format_uid_hex(")]
+lf_samples = (ROOT / "readers/lf_samples.c").read_text()
+range_header = lf_samples[lf_samples.index("#define LF_REPLY_TIMEOUT_MS"):lf_samples.index("static uint16_t lf_sample_stream_chunk_size")]
+range_reader = lf_samples[lf_samples.index("static int lf_sample_receive_range"):lf_samples.index("int lf_samples_download")]
 with tempfile.TemporaryDirectory(prefix="pm5-reply-order-") as directory:
     temp = Path(directory)
     (temp / "furi_hal.h").write_text(HAL)
-    (temp / "test.c").write_text(HOST + reader + CASES)
+    (temp / "test.c").write_text(HOST + reader + range_header + range_reader + CASES)
     executable = temp / "test"
     command = shlex.split(os.environ.get("CC", "cc")) + [
         "-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(temp), "-I", str(DRIVER),

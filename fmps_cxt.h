@@ -11,6 +11,7 @@
 #include "pages/read_hitag2_page.h"
 #include "pages/read_hf14a_page.h"
 #include "pages/status_page.h"
+#include "pages/simple_reader_page.h"
 
 typedef enum {
     // The main page of the app, showing the connection status and some basic info
@@ -21,6 +22,7 @@ typedef enum {
     ReadHitag2PageViewId,
     // HF 14a Reader operation page
     ReadHf14aPageViewId,
+    SimpleReaderPageViewId,
     StatusPageViewId,
 } Proxmark5ViewId;
 
@@ -33,6 +35,7 @@ typedef struct {
     OperatePage* operate_page;
     ReadHitag2Page* read_hitag2_page;
     ReadHf14aPage* read_hf14a_page;
+    SimpleReaderPage* simple_reader_page;
     StatusPage* status_page;
 } Proxmark5App;
 
