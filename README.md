@@ -2,7 +2,7 @@
 
 Run the installed Flipper app against a Proxmark5 connected over USB and CEP. The bench sets up each synthetic tag on a Chameleon Ultra, reads it with the PM5 USB client, opens the same reader on the Flipper and rescans. It compares the result records emitted by the FAP when each read finishes. Screenshots show the device view for manual review.
 
-The HF fixtures cover Ultralight, NTAG213, and four- and seven-byte MIFARE Classic UIDs. The ISO 14443-4 cases also check ATS, its CRC and a ten-byte UID. The LF set uses three RF/64 EM4100 IDs. Hitag2 and T5577 use physical tags. The T5577 must use RF/32 Manchester.
+The HF fixtures check UID, ATQA and SAK for Ultralight, Ultralight EV1, NTAG210/212/213, and MIFARE Classic 1K with four- and seven-byte UIDs. The ISO 14443-4 cases also check ATS, its CRC and a ten-byte UID. The LF set uses three RF/64 EM4100 IDs. Hitag2 and T5577 use physical tags. The T5577 must use RF/32 Manchester.
 
 ## Setup
 
