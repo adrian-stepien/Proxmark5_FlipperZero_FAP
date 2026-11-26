@@ -7,9 +7,10 @@
 #include "simple_readers.h"
 #include "type2_ndef.h"
 
-#define NTAG213_USER_START 4U
-#define NTAG213_USER_BYTES ((NTAG213_READ_PAGES - NTAG213_USER_START) * NTAG213_PAGE_BYTES)
 #define NTAG213_TIMEOUT_MS 2500U
+#define NTAG213_DYNAMIC_LOCK_PAGE 40U
+#define NTAG213_CONFIG_PAGE 41U
+
 const uint8_t ntag213_version[NTAG213_VERSION_BYTES] = {
     0x00, 0x04, 0x04, 0x02, 0x01, 0x00, 0x0f, 0x03};
 
@@ -28,11 +29,21 @@ static int read_reply(uint16_t cmd, PacketResponseNG* reply) {
     return reply->status;
 }
 
-static int ntag213_select(uint8_t uid[NTAG213_UID_BYTES], PacketResponseNG* reply) {
+static bool ntag213_crc_valid(const uint8_t* bytes, size_t length) {
+    BitBuffer* frame = bit_buffer_alloc(length);
+    bit_buffer_copy_bytes(frame, bytes, length);
+    bool valid = iso14443_crc_check(Iso14443CrcTypeA, frame);
+    bit_buffer_free(frame);
+    return valid;
+}
+
+static int ntag213_select(
+    uint8_t uid[NTAG213_UID_BYTES], bool keep_field, PacketResponseNG* reply) {
     uint8_t request[sizeof(iso14a_raw_cmd_t) + 1] = {0};
     iso14a_raw_cmd_t* command = (iso14a_raw_cmd_t*)request;
     command->flags = ISO14A_CONNECT | ISO14A_RAW | ISO14A_APPEND_CRC |
                      ISO14A_NO_RATS | ISO14A_CLEARTRACE;
+    if(keep_field) command->flags |= ISO14A_NO_DISCONNECT;
     command->len = 1;
     command->data[0] = 0x60; // GET_VERSION
     clearCommandBuffer();
@@ -63,11 +74,7 @@ static int ntag213_select(uint8_t uid[NTAG213_UID_BYTES], PacketResponseNG* repl
        memcmp(response->data, ntag213_version, sizeof(ntag213_version)) != 0) {
         return PM3_ENODATA;
     }
-    BitBuffer* frame = bit_buffer_alloc(response->len);
-    bit_buffer_copy_bytes(frame, response->data, response->len);
-    bool crc_ok = iso14443_crc_check(Iso14443CrcTypeA, frame);
-    bit_buffer_free(frame);
-    return crc_ok ? PM3_SUCCESS : PM3_ECRC;
+    return ntag213_crc_valid(response->data, response->len) ? PM3_SUCCESS : PM3_ECRC;
 }
 
 static int ntag213_read_pages(uint8_t* pages, PacketResponseNG* reply) {
@@ -135,7 +142,7 @@ static void ntag213_format_details(const uint8_t* pages, FuriString* text) {
 static int ntag213_read(SimpleReaderResult* result) {
     uint8_t uid[NTAG213_UID_BYTES];
     PacketResponseNG reply;
-    int status = ntag213_select(uid, &reply);
+    int status = ntag213_select(uid, false, &reply);
     if(status != PM3_SUCCESS) return status;
     status = ntag213_read_pages(result->data, &reply);
     if(status != PM3_SUCCESS) return status;
@@ -164,3 +171,132 @@ const SimpleReader simple_reader_ntag213 = {
     .format = ntag213_format_result,
     .format_details = ntag213_format_details,
 };
+
+static const uint8_t* ntag213_raw(
+    const uint8_t* data, size_t length, size_t reply_length, PacketResponseNG* reply) {
+    uint8_t request[sizeof(iso14a_raw_cmd_t) + 2 + NTAG213_PAGE_BYTES] = {0};
+    furi_assert(length <= sizeof(request) - sizeof(iso14a_raw_cmd_t));
+    iso14a_raw_cmd_t* command = (iso14a_raw_cmd_t*)request;
+    command->flags = ISO14A_RAW | ISO14A_APPEND_CRC | ISO14A_NO_DISCONNECT;
+    command->len = length;
+    memcpy(command->data, data, length);
+    clearCommandBuffer();
+    if(!SendCommandNG(CMD_HF_ISO14443A_READER, request, sizeof(*command) + length) ||
+       read_reply(CMD_HF_ISO14443A_READER, reply) != PM3_SUCCESS ||
+       reply->length != sizeof(iso14a_raw_resp_t) + reply_length) {
+        return NULL;
+    }
+    const iso14a_raw_resp_t* response = (const iso14a_raw_resp_t*)reply->data.asBytes;
+    return !response->sel && response->len == reply_length ? response->data : NULL;
+}
+
+static bool ntag213_fast_read(
+    uint8_t first, uint8_t last, uint8_t* output, PacketResponseNG* reply) {
+    const uint8_t request[] = {0x3a, first, last};
+    size_t size = (last - first + 1) * NTAG213_PAGE_BYTES;
+    const uint8_t* data = ntag213_raw(request, sizeof(request), size + ISO14443_CRC_SIZE, reply);
+    if(!data || !ntag213_crc_valid(data, size + ISO14443_CRC_SIZE)) return false;
+    memcpy(output, data, size);
+    return true;
+}
+
+static bool ntag213_write_page(uint8_t page, const uint8_t* bytes, PacketResponseNG* reply) {
+    uint8_t request[2 + NTAG213_PAGE_BYTES] = {0xa2, page};
+    memcpy(request + 2, bytes, NTAG213_PAGE_BYTES);
+    const uint8_t* ack = ntag213_raw(request, sizeof(request), 1, reply);
+    return ack && *ack == 0x0a;
+}
+
+static Ntag213WriteResult ntag213_write_selected(
+    const Ntag213Pages* expected,
+    const char* text,
+    Ntag213WriteProgress progress,
+    void* context,
+    PacketResponseNG* reply) {
+    uint8_t current[(NTAG213_CONFIG_PAGE + 1) * NTAG213_PAGE_BYTES];
+    if(!ntag213_fast_read(0, NTAG213_CONFIG_PAGE, current, reply)) return Ntag213WriteLinkError;
+    if(memcmp(current, expected->bytes, sizeof(expected->bytes))) return Ntag213WriteTagChanged;
+
+    const uint8_t* locks = current + NTAG213_DYNAMIC_LOCK_PAGE * NTAG213_PAGE_BYTES;
+    const uint8_t* config = current + NTAG213_CONFIG_PAGE * NTAG213_PAGE_BYTES;
+    if(current[10] || current[11] || locks[0] || locks[1] || locks[2] ||
+       config[3] < NTAG213_READ_PAGES) {
+        return Ntag213WriteProtected;
+    }
+
+    static const uint8_t capability[] = {0xe1, 0x10, 0x12, 0x00};
+    uint8_t* old_user = current + NTAG213_USER_START * NTAG213_PAGE_BYTES;
+    uint8_t new_user[NTAG213_USER_BYTES];
+    memcpy(new_user, old_user, sizeof(new_user));
+    // Mirroring can change readback without changing the stored bytes.
+    if(memcmp(current + 3 * NTAG213_PAGE_BYTES, capability, sizeof(capability)) ||
+       (config[0] & 0xc0) || !type2_ndef_replace_text(new_user, sizeof(new_user), text)) {
+        return Ntag213WriteUnsupported;
+    }
+    if(!memcmp(old_user, new_user, sizeof(new_user))) return Ntag213WriteVerified;
+
+    bool changed[NTAG213_READ_PAGES - NTAG213_USER_START] = {0};
+    size_t total = 2; // Clear the NDEF length, then publish it last.
+    for(unsigned i = 1; i < COUNT_OF(changed); i++) {
+        size_t offset = i * NTAG213_PAGE_BYTES;
+        changed[i] = memcmp(old_user + offset, new_user + offset, NTAG213_PAGE_BYTES) != 0;
+        if(changed[i]) total++;
+    }
+
+    static const uint8_t empty_page[] = {0x03, 0x00, 0xfe, 0x00};
+    progress(Ntag213WritePages, 0, total, context);
+    if(!ntag213_write_page(NTAG213_USER_START, empty_page, reply)) return Ntag213WriteIncomplete;
+    size_t done = 1;
+    for(unsigned i = 1; i < COUNT_OF(changed); i++) {
+        if(!changed[i]) continue;
+        progress(Ntag213WritePages, done, total, context);
+        const uint8_t* bytes = new_user + i * NTAG213_PAGE_BYTES;
+        if(!ntag213_write_page(NTAG213_USER_START + i, bytes, reply)) {
+            return Ntag213WriteIncomplete;
+        }
+        done++;
+    }
+    progress(Ntag213WritePages, done, total, context);
+    if(!ntag213_write_page(NTAG213_USER_START, new_user, reply)) return Ntag213WriteIncomplete;
+
+    progress(Ntag213WriteVerifying, 0, 0, context);
+    if(!ntag213_fast_read(0, NTAG213_READ_PAGES - 1, current, reply) ||
+       memcmp(current, expected->bytes, NTAG213_USER_START * NTAG213_PAGE_BYTES) ||
+       memcmp(old_user, new_user, sizeof(new_user))) {
+        return Ntag213WriteIncomplete;
+    }
+    return Ntag213WriteVerified;
+}
+
+Ntag213WriteResult ntag213_write_text(
+    const Ntag213Pages* expected,
+    const char* text,
+    Ntag213WriteProgress progress,
+    void* context,
+    bool* cleanup_ok) {
+    uint8_t expected_uid[NTAG213_UID_BYTES];
+    uint8_t selected_uid[NTAG213_UID_BYTES];
+    PacketResponseNG reply;
+    ntag213_pages_uid(expected, expected_uid);
+    proxmark5_frame_begin_operation(NULL);
+    progress(Ntag213WriteChecking, 0, 0, context);
+    Ntag213WriteResult result = Ntag213WriteLinkError;
+    int status = ntag213_select(selected_uid, true, &reply);
+    if(status == PM3_SUCCESS) {
+        result = memcmp(expected_uid, selected_uid, sizeof(selected_uid)) ?
+                     Ntag213WriteTagChanged :
+                     ntag213_write_selected(expected, text, progress, context, &reply);
+    } else if(status == PM3_ENODATA) {
+        result = Ntag213WriteTagChanged;
+    }
+    iso14a_raw_cmd_t field_off = {0};
+    *cleanup_ok = false;
+    // The disconnect has no reply. Fence it before releasing the link.
+    for(unsigned attempt = 0; attempt < 2 && !*cleanup_ok; attempt++) {
+        *cleanup_ok =
+            SendCommandNG(CMD_HF_ISO14443A_READER, (uint8_t*)&field_off, sizeof(field_off)) &&
+            proxmark5_frame_synchronize();
+    }
+    proxmark5_frame_end_operation();
+    return result;
+}

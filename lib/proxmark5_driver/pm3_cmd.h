@@ -1173,6 +1173,7 @@ typedef struct {
 // if the command's request/reply shape ever changes.
 typedef enum ISO14A_COMMAND {
     ISO14A_CONNECT = (1 << 0),
+    ISO14A_NO_DISCONNECT = (1 << 1),
     ISO14A_RAW = (1 << 3),
     ISO14A_APPEND_CRC = (1 << 5),
     ISO14A_NO_RATS = (1 << 9),
