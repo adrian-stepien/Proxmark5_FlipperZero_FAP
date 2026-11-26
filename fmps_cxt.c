@@ -57,14 +57,14 @@ static uint32_t operate_page_previous_callback(void* context) {
 // Context is the view's context, which is the page itself (set in read_hitag2_page_create).
 static uint32_t read_hitag2_page_previous_callback(void* context) {
     ReadHitag2Page* read_hitag2_page = context;
-    read_hitag2_page_stop(read_hitag2_page);
+    read_hitag2_page_stop_worker(read_hitag2_page);
     return OperatePageViewId;
 }
 
 // Context is the view's context, which is the page itself (set in read_hf14a_page_create).
 static uint32_t read_hf14a_page_previous_callback(void* context) {
     ReadHf14aPage* read_hf14a_page = context;
-    read_hf14a_page_stop(read_hf14a_page);
+    read_hf14a_page_stop_worker(read_hf14a_page);
     return OperatePageViewId;
 }
 

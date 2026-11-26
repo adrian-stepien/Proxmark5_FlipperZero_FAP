@@ -214,7 +214,7 @@ static bool read_hitag2_page_input_callback(InputEvent* event, void* context) {
     // InputKeyBack is deliberately left unhandled: the ViewDispatcher routes it
     // through the view's previous-callback, which already leaves the page.
     if(event->type == InputTypeShort && event->key == InputKeyLeft) {
-        read_hitag2_page_stop(read_hitag2_page);
+        read_hitag2_page_stop_worker(read_hitag2_page);
         if(read_hitag2_page->back_callback) {
             read_hitag2_page->back_callback(read_hitag2_page->back_callback_context);
         }

@@ -163,7 +163,7 @@ static bool read_hf14a_page_input_callback(InputEvent* event, void* context) {
     // InputKeyBack is deliberately left unhandled: the ViewDispatcher routes it
     // through the view's previous-callback, which already leaves the page.
     if(event->type == InputTypeShort && event->key == InputKeyLeft) {
-        read_hf14a_page_stop(read_hf14a_page);
+        read_hf14a_page_stop_worker(read_hf14a_page);
         if(read_hf14a_page->back_callback) {
             read_hf14a_page->back_callback(read_hf14a_page->back_callback_context);
         }
