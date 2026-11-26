@@ -264,7 +264,7 @@ with tempfile.TemporaryDirectory() as directory:
     (tmp / "furi.h").write_text(
         "#include <stdlib.h>\n#include <string.h>\n#include <stdint.h>\n#include <stdbool.h>\n"
         "int32_t furi_kernel_lock(void);\nint32_t furi_kernel_unlock(void);\n"
-        "size_t memmgr_heap_get_max_free_block(void);\nuint32_t furi_get_tick(void);\n#define MIN(a, b) ((a) < (b) ? (a) : (b))\n"
+        "size_t memmgr_heap_get_max_free_block(void);\nuint32_t furi_get_tick(void);\ntypedef struct FuriString FuriString;\n#define MIN(a, b) ((a) < (b) ? (a) : (b))\n"
         "#define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))\n"
     )
     protocol_api = tmp / "toolbox/protocols/protocol_dict.h"
