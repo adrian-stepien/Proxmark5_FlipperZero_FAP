@@ -2,6 +2,7 @@
 #include <gui/canvas.h>
 #include <gui/elements.h>
 #include "simple_reader_page.h"
+#include "../reader_log.h"
 #include "pm3_cmd.h"
 #include "../readers/lf_capture.h"
 #include "proxmark5_frame.h"
@@ -109,11 +110,13 @@ static int32_t simple_reader_worker(void* context) {
         if(publish) {
             model->running = false;
             model->status = status;
+            free(model->result.data);
             model->result = result;
         } else {
             free(result.data);
         }
         view_commit_model(page->view, publish);
+        if(publish && reader->name) reader_log_bytes(reader->name, status, result.data, reader->data_size);
     }
 }
 
@@ -123,8 +126,6 @@ void simple_reader_page_start(SimpleReaderPage* page, const SimpleReader* reader
     page->worker_active = true;
     page->next_reader = reader;
     page->discard_result = true;
-    free(model->result.data);
-    model->result = (SimpleReaderResult){0};
     model->reader = reader;
     model->running = true;
     view_commit_model(page->view, true);

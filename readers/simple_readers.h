@@ -16,6 +16,7 @@ typedef struct {
 } SimpleReaderResult;
 
 typedef struct {
+    const char* name;
     const char* title;
     const char* prompt;
     const char* no_data;

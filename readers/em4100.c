@@ -129,6 +129,7 @@ static int em4100_read(SimpleReaderResult* result) {
 }
 
 const SimpleReader simple_reader_em4100 = {
+    .name = "em4100",
     .title = "EM4100 Reader",
     .prompt = "Hold tag to PM5 LF coil",
     .no_data = "No EM4100 ID read",
