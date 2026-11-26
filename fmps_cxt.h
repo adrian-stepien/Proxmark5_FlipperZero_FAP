@@ -4,6 +4,7 @@
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
 #include <gui/scene_manager.h>
+#include <gui/modules/text_box.h>
 
 // Pages
 #include "pages/main_page.h"
@@ -11,6 +12,7 @@
 #include "pages/read_hitag2_page.h"
 #include "pages/read_hf14a_page.h"
 #include "pages/status_page.h"
+#include "pages/simple_reader_page.h"
 
 typedef enum {
     // The main page of the app, showing the connection status and some basic info
@@ -23,6 +25,9 @@ typedef enum {
     ReadHf14aPageViewId,
     StatusPageViewId,
     HardwareMenuViewId,
+    SavedMenuViewId,
+    SavedTagReadViewId,
+    SimpleReaderPageViewId,
 } Proxmark5ViewId;
 
 typedef struct {
@@ -35,6 +40,9 @@ typedef struct {
     ReadHitag2Page* read_hitag2_page;
     ReadHf14aPage* read_hf14a_page;
     StatusPage* status_page;
+    SimpleReaderPage* simple_reader_page;
+    TextBox* saved_tag_view;
+    FuriString* saved_tag_text;
 } Proxmark5App;
 
 #endif // FMPS_CXT_H
