@@ -14,13 +14,17 @@ TEST = r'''
 #include "bigbuf.c"
 #include "lf_capture.c"
 #include "em4100.c"
+#include "t5577.c"
 
 static uint8_t samples[EM_SAMPLE_COUNT];
 static unsigned received, range_size, range_received, downloads, capture_size;
 static uint16_t peer_payload_size = PM3_CMD_DATA_SIZE;
 static int bad_chunk;
 static bool drop_first_download, drop_later_chunk, bad_first_download_only;
-static unsigned cap_requests;
+static unsigned block_requests, cap_requests, handshakes, ping_requests;
+static unsigned missed_block_replies, missed_ping_replies;
+static uint32_t ping_token;
+static bool reconnect_fails, recover_download_on_handshake;
 static unsigned range_fences;
 static unsigned missed_cap_replies;
 static bool block_ready;
@@ -72,6 +76,11 @@ uint32_t furi_get_tick(void) {
     static uint32_t tick;
     return ++tick;
 }
+bool proxmark5_com_handshake(void) {
+    handshakes++;
+    if(recover_download_on_handshake) drop_later_chunk = false;
+    return !reconnect_fails;
+}
 bool proxmark5_frame_synchronize(void) {
     range_fences++;
     if(config_needs_fence && lose_config_echo) return false;
@@ -80,9 +89,21 @@ bool proxmark5_frame_synchronize(void) {
 }
 bool SendCommandNG(uint16_t cmd, uint8_t* data, size_t length) {
     switch(cmd) {
+    case CMD_PING:
+        assert(length == sizeof(ping_token) && handshakes);
+        memcpy(&ping_token, data, sizeof(ping_token));
+        ping_requests++;
+        break;
     case CMD_CAPABILITIES:
         assert(length == 0 && block_ready);
         cap_requests++;
+        break;
+    case CMD_LF_T55XX_READBL:
+        assert(length == 8 && memcmp(data, (uint8_t[8]){0}, 8) == 0);
+        block_ready = false;
+        block_requests++;
+        capture_size = T5577_SAMPLE_COUNT;
+        received = downloads = 0;
         break;
     case CMD_DOWNLOAD_BIGBUF:
         assert(length == 8 && read_le32(data) == received);
@@ -91,7 +112,7 @@ bool SendCommandNG(uint16_t cmd, uint8_t* data, size_t length) {
         downloads++;
         assert(range_size && received + range_size <= capture_size);
         if(peer_payload_size <= PM3_CMD_DATA_SIZE) {
-            assert(range_size == EM_SAMPLES_PER_BLOCK);
+            assert(range_size == (capture_size == T5577_SAMPLE_COUNT ? capture_size : EM_SAMPLES_PER_BLOCK));
         } else {
             assert(range_size <= PM3_CMD_DATA_SIZE - 4);
         }
@@ -123,6 +144,21 @@ bool SendCommandNG(uint16_t cmd, uint8_t* data, size_t length) {
 bool WaitForResponseTimeout(uint16_t cmd, PacketResponseNG* p, uint32_t timeout) {
     (void)timeout;
     memset(p, 0, sizeof(*p));
+    if(cmd == CMD_PING) {
+        if(missed_ping_replies) {
+            missed_ping_replies--;
+            return false;
+        }
+        p->length = sizeof(ping_token);
+        memcpy(p->data.asBytes, &ping_token, sizeof(ping_token));
+    }
+    if(cmd == CMD_LF_T55XX_READBL) {
+        if(missed_block_replies) {
+            missed_block_replies--;
+            return false;
+        }
+        block_ready = true;
+    }
     if(cmd == CMD_CAPABILITIES) {
         if(missed_cap_replies) {
             missed_cap_replies--;
@@ -170,6 +206,83 @@ bool WaitForResponseTimeout(uint16_t cmd, PacketResponseNG* p, uint32_t timeout)
 
 void saved_em4100_save(const uint8_t* id) { (void)id; }
 
+static void waveform(uint32_t word, unsigned phase, bool invert) {
+    unsigned period = (word & T5577_SEQUENCE_TERMINATOR) ? 36 : 32;
+    for(unsigned i = 0; i < sizeof(samples); i++) {
+        unsigned pos = i + phase;
+        unsigned index = (pos / 32) % period;
+        bool high = invert;
+        if(index < 32) {
+            bool bit = (word >> (31 - index)) & 1;
+            high = bit ^ ((pos % 32) < 16) ^ invert;
+        }
+        samples[i] = (high ? 155 : 94) + (i % 7);
+    }
+}
+
+void saved_tag_read_save(const SavedTagRead* tag) { (void)tag; }
+
+static void test_t5577(void) {
+    uint8_t tag[4];
+    for(unsigned phase = 0; phase < 32; phase++) {
+        waveform(0x000880E0, phase, phase % 2);
+        assert(read_t5577_config(tag) == PM3_SUCCESS);
+        assert(memcmp(tag, (uint8_t[4]){0,8,0x80,0xE0}, 4) == 0);
+        waveform(0x000880E8, phase, phase % 2);
+        assert(read_t5577_config(tag) == PM3_SUCCESS && downloads == 1);
+        assert(memcmp(tag, (uint8_t[4]){0,8,0x80,0xE8}, 4) == 0);
+    }
+    block_requests = handshakes = cap_requests = ping_requests = 0;
+    missed_block_replies = missed_cap_replies = missed_ping_replies = 1;
+    assert(read_t5577_config(tag) == PM3_SUCCESS);
+    assert(block_requests == 2 && handshakes == 1 && ping_requests == 2);
+    assert(cap_requests == 2 && downloads == 1);
+
+    block_requests = handshakes = cap_requests = 0;
+    missed_block_replies = 1;
+    reconnect_fails = true;
+    assert(read_t5577_config(tag) == PM3_ETIMEOUT);
+    assert(block_requests == 1 && handshakes == 1 && cap_requests == 0 && downloads == 0);
+    reconnect_fails = false;
+
+    block_requests = handshakes = ping_requests = 0;
+    missed_block_replies = 1;
+    missed_ping_replies = 2;
+    assert(read_t5577_config(tag) == PM3_ETIMEOUT);
+    assert(block_requests == 1 && handshakes == 1 && ping_requests == 2 && !downloads);
+
+    drop_first_download = true;
+    range_fences = 0;
+    assert(read_t5577_config(tag) == PM3_SUCCESS && downloads == 2);
+    assert(range_fences == 1);
+    drop_first_download = false;
+    block_requests = handshakes = ping_requests = 0;
+    drop_later_chunk = true;
+    recover_download_on_handshake = true;
+    assert(read_t5577_config(tag) == PM3_SUCCESS && downloads == 1);
+    assert(block_requests == 2 && handshakes == 1 && ping_requests == 1);
+    recover_download_on_handshake = false;
+    block_requests = handshakes = 0;
+    drop_later_chunk = true;
+    assert(read_t5577_config(tag) == PM3_ETIMEOUT && downloads == 1);
+    assert(block_requests == 2 && handshakes == 1);
+    drop_later_chunk = false;
+    peer_payload_size = 4064;
+    assert(read_t5577_config(tag) == PM3_SUCCESS && downloads == 13);
+    peer_payload_size = PM3_CMD_DATA_SIZE;
+    bad_chunk = 1;
+    bad_first_download_only = true;
+    assert(read_t5577_config(tag) == PM3_SUCCESS && downloads == 2);
+    bad_first_download_only = false;
+    assert(read_t5577_config(tag) == PM3_ESOFT && downloads == 3);
+    bad_chunk = 0;
+    waveform(0x000880F0, 13, false);
+    assert(read_t5577_config(tag) == PM3_ENODATA);
+    memset(samples, 128, sizeof(samples));
+    assert(read_t5577_config(tag) == PM3_ENODATA);
+
+}
+
 int main(void) {
     uint8_t tag[5];
     SimpleReaderResult result = {.data = tag};
@@ -206,6 +319,8 @@ int main(void) {
     assert(block);
     free(block);
 
+    max_heap_block = sizeof(samples);
+    test_t5577();
     puts("LF reader tests passed");
 }
 '''
@@ -215,7 +330,7 @@ with tempfile.TemporaryDirectory() as directory:
     (tmp / "furi.h").write_text(
         "#include <stdlib.h>\n#include <string.h>\n#include <stdint.h>\n#include <stdbool.h>\n"
         "int32_t furi_kernel_lock(void);\nint32_t furi_kernel_unlock(void);\n"
-        "size_t memmgr_heap_get_max_free_block(void);\nuint32_t furi_get_tick(void);\n#define MIN(a, b) ((a) < (b) ? (a) : (b))\n"
+        "size_t memmgr_heap_get_max_free_block(void);\nuint32_t furi_get_tick(void);\ntypedef struct FuriString FuriString;\n#define MIN(a, b) ((a) < (b) ? (a) : (b))\n"
         "#define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))\n"
     )
     protocol_api = tmp / "toolbox/protocols/protocol_dict.h"
