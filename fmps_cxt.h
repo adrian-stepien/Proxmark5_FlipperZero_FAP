@@ -22,6 +22,7 @@ typedef enum {
     // HF 14a Reader operation page
     ReadHf14aPageViewId,
     StatusPageViewId,
+    HardwareMenuViewId,
 } Proxmark5ViewId;
 
 typedef struct {
