@@ -166,6 +166,7 @@ const SimpleReader simple_reader_ntag213 = {
     .no_data = "No NTAG213 found",
     .no_data_hint = "Use the PM5 HF antenna",
     .data_size = NTAG213_READ_BYTES,
+    .has_actions = true,
     .read = ntag213_read,
     .save = ntag213_save,
     .format = ntag213_format_result,
