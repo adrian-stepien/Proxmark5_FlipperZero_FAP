@@ -2,6 +2,7 @@
 #include <furi_hal.h>
 #include <fmps_cxt_icons.h>
 #include "fmps_cxt.h"
+#include "reader_log.h"
 #include "proxmark5_com.h"
 #include "pages/saved_em4100.h"
 #include "pages/saved_tag_read.h"
@@ -49,6 +50,7 @@ static bool fmps_cxt_custom_event_callback(void* context, uint32_t event) {
 
     switch(event) {
     case OperateOpenMenu:
+        reader_log_event("read_menu");
         view_dispatcher_switch_to_view(app->view_dispatcher, OperatePageViewId);
         return true;
     case OperateOpenSaved:
@@ -237,6 +239,7 @@ void proxmark5_app_free(Proxmark5App* app) {
         status_page_free(app->status_page);
         app->status_page = NULL;
     }
+    reader_log_close();
     view_dispatcher_free(app->view_dispatcher);
     furi_record_close(RECORD_GUI);
     free(app);
@@ -244,13 +247,12 @@ void proxmark5_app_free(Proxmark5App* app) {
 
 // Furi application entry point
 int32_t fmps_cxt_app(void* p) {
-    UNUSED(p);
-
     // Initialize proxmark5 communication interfaces
     proxmark5_com_init();
 
     // Create the app context and start the view dispatcher
     Proxmark5App* app = proxmark5_app_alloc();
+    reader_log_open(p, app->view_dispatcher);
     // Default to the main page view
     view_dispatcher_switch_to_view(app->view_dispatcher, MainPageViewId);
     main_page_start(app->main_page);

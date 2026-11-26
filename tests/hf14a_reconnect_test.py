@@ -61,7 +61,14 @@ static FuriThread thread;
 static int results[2], reads, handshakes, reconnect_screens, failures_remaining;
 static bool handshake_ok, card_found, cancel_handshake;
 static bool owns_link, model_locked;
-static unsigned reopen;
+static unsigned reopen, log_records;
+static int log_status;
+void reader_log_hf14a(int status, const iso14a_card_select_t* card) {
+    assert(!owns_link && !model_locked);
+    if(status == PM3_SUCCESS) assert(card->uid[0] == 0x42);
+    log_records++;
+    log_status = status;
+}
 static void* view_get_model(void* view) {
     assert(!model_locked);
     model_locked = true;
@@ -122,6 +129,7 @@ static void check(int first, int second, bool connected, bool found, bool cancel
     };
     results[0] = first; results[1] = second;
     reads = handshakes = reconnect_screens = 0;
+    log_records = 0;
     handshake_ok = connected; card_found = found; cancel_handshake = cancel;
     assert(read_hf14a_page_worker(&page) == 0);
     if(reopen == 1) fprintf(stderr, "Quick reopen ran %d scan(s), expected %d\n", reads, expected_reads);
@@ -130,6 +138,10 @@ static void check(int first, int second, bool connected, bool found, bool cancel
     assert(reads == expected_reads && handshakes == expected_handshakes);
     assert(reconnect_screens == (expected_handshakes > 0 ? 1 : 0));
     if(expected == ReadHf14aPageStateSuccess) assert(model.card.uid[0] == 0x42);
+#ifdef CHECK_READER_LOG
+    assert(log_records == (expected == ReadHf14aPageStateIdle ? 0 : 1));
+    if(expected == ReadHf14aPageStateNotFound) assert(log_status == PM3_ENODATA);
+#endif
 }
 int main(void) {
     check(PM3_SUCCESS, 0, false, false, false, ReadHf14aPageStateNotFound, 1, 0);
@@ -164,8 +176,9 @@ controls = source[source.index("void read_hf14a_page_start("):]
 with tempfile.TemporaryDirectory(prefix="hf14a-reconnect-") as folder:
     source_file = Path(folder) / "test.c"
     executable = Path(folder) / "test"
+    check_log = "#define CHECK_READER_LOG\n" if "reader_log_hf14a(" in source else ""
     source_file.write_text(
-        STUBS + "\n#define HF14A_RECONNECT_ATTEMPTS 3\n" + source[start:end] + controls + CASES
+        STUBS + check_log + "\n#define HF14A_RECONNECT_ATTEMPTS 3\n" + source[start:end] + controls + CASES
     )
     command = shlex.split(os.environ.get("CC", "cc")) + [
         "-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(ROOT / "lib/proxmark5_driver"),

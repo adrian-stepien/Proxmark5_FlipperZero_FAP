@@ -5,6 +5,7 @@
 #include "saved_tag_read.h"
 #include "proxmark5_com.h"
 #include "proxmark5_frame.h"
+#include "../reader_log.h"
 #include "pm3_cmd.h"
 
 typedef enum {
@@ -348,6 +349,9 @@ static bool read_hf14a_page_scan(ReadHf14aPage* read_hf14a_page) {
     }
     read_hf14a_page->worker_thread_running = false;
     view_commit_model(read_hf14a_page->view, true);
+    if(result != PM3_EOPABORTED) {
+        reader_log_hf14a(result == PM3_SUCCESS && !found ? PM3_ENODATA : result, &card);
+    }
     return false;
 }
 

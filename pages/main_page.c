@@ -3,6 +3,7 @@
 #include "main_page.h"
 #include "proxmark5_com.h"
 #include "proxmark5_frame.h"
+#include "../reader_log.h"
 
 typedef struct {
     MainPageChoice selected;
@@ -54,6 +55,7 @@ static int32_t proxmark5_handshake_task(void* context) {
             MainPageModel* model = view_get_model(page->canvas_view);
             model->connected = true;
             view_commit_model(page->canvas_view, true);
+            reader_log_event("ready");
             FURI_LOG_I("proxmark5_handshake_task", "Proxmark5 handshake successful");
             break;
         }
