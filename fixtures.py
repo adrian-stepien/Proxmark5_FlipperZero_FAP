@@ -118,6 +118,7 @@ CASES = (
     Case("ntag213-7", HF, "NTAG_213", "0458A1B9C3D47E", "0044", "00"),
     Case("ntag215-7", HF, "NTAG_215", "04029D735CA100", "0044", "00"),
     Case("ntag216-7", HF, "NTAG_216", "0400629B14C7E0", "0044", "00"),
+    Case("classic-mini", HF, "MIFARE_Mini", "02C519A7", "0004", "09"),
     Case("classic-4", HF, "MIFARE_1024", "02A917C4", "0004", "08"),
     Case("classic-7", HF, "MIFARE_1024", "02E7A4C18B5309", "0044", "08"),
     Case("classic-4k", HF, "MIFARE_4096", "04A46E29", "0002", "18"),
