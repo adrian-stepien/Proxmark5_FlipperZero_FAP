@@ -5,6 +5,7 @@
 #include "saved_tag_read.h"
 #include "proxmark5_com.h"
 #include "proxmark5_frame.h"
+#include "../reader_log.h"
 #include "pm3_cmd.h"
 #include "hitag.h"
 
@@ -286,6 +287,10 @@ static bool read_hitag2_page_scan(ReadHitag2Page* read_hitag2_page) {
     }
     read_hitag2_page->worker_thread_running = false;
     view_commit_model(read_hitag2_page->view, true);
+    if(result != PM3_EOPABORTED) {
+        const uint8_t data[] = {uid >> 24, uid >> 16, uid >> 8, uid};
+        reader_log_bytes("hitag2", result, data, sizeof(data));
+    }
     return false;
 }
 
