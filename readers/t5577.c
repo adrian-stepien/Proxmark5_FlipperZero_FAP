@@ -141,6 +141,7 @@ static void t5577_save(const uint8_t* config) {
 }
 
 const SimpleReader simple_reader_t5577 = {
+    .name = "t5577",
     .title = "T5577 Info",
     .prompt = "Hold tag to PM5 LF coil",
     .no_data = "No supported config read",
