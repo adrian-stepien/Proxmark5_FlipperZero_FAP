@@ -36,8 +36,8 @@ def read_app(flipper, reader, reference, directory, phases):
         log = ReaderLog(stream, directory / "flipper.jsonl")
         try:
             log.next("ready", 8)
-            stream.press("RIGHT")
-            log.next("functions", 4)
+            stream.press("OK")
+            log.next("read_menu", 4)
             for _ in range(reader.position):
                 stream.press("DOWN", wait_for_screen=True)
             for phase, key in (("first", "OK"), ("rescan", reader.rescan)):
